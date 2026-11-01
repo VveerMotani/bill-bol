@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bill बोल</title>
+<style>
+  :root { --bg:#faf7f2; --card:#fff; --ink:#1f1b16; --muted:#6b6259; --line:#e7dfd4; --accent:#d9480f; --warn:#fff3bf; --ok:#2b8a3e; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 system-ui, "Noto Sans", sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:20px 16px 60px; }
+  h1 { margin:0; font-size:28px; } h1 span { color:var(--accent); }
+  .sub { color:var(--muted); margin:4px 0 20px; }
+  .tabs { display:flex; gap:8px; margin-bottom:16px; }
+  .tabs button { flex:1; padding:10px; border:1px solid var(--line); background:var(--card); border-radius:10px; font:inherit; cursor:pointer; }
+  .tabs button.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  #mic { display:block; width:120px; height:120px; margin:10px auto; border-radius:50%; border:0; background:var(--accent); color:#fff; font-size:44px; cursor:pointer; }
+  #mic.rec { animation:pulse 1s infinite; background:#c92a2a; }
+  @keyframes pulse { 50% { transform:scale(1.07); } }
+  #status { text-align:center; color:var(--muted); min-height:24px; }
+  .transcript { background:var(--bg); border-radius:10px; padding:10px 12px; margin:14px 0; font-style:italic; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:13px; color:var(--muted); font-weight:600; }
+  td.num, th.num { text-align:right; white-space:nowrap; }
+  .small { font-size:13px; color:var(--muted); }
+  .tag { display:inline-block; font-size:12px; padding:1px 6px; border-radius:6px; background:#e6fcf5; color:var(--ok); }
+  tr.missing { background:var(--warn); }
+  input { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:8px; width:100%; }
+  input.price { width:90px; text-align:right; }
+  .total td { font-weight:700; font-size:20px; border:0; }
+  .btn { padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); font:inherit; cursor:pointer; }
+  .btn.link { border:0; background:none; color:var(--accent); padding:0; font-size:13px; }
+  .modes { display:flex; gap:8px; justify-content:center; margin-top:12px; }
+  .modes .btn { white-space:nowrap; font-size:14px; }
+  .modes .on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .transcript div + div { margin-top:4px; }
+  .hidden { display:none !important; }
+  .badge { display:inline-block; min-width:20px; padding:0 6px; margin-left:4px; border-radius:10px; background:var(--accent); color:#fff; font-size:12px; line-height:20px; }
+  .order { border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:10px; }
+  .order.new { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .order .head { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  .order .what { margin:6px 0 10px; font-size:18px; }
+  .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Bill <span lang="hi">बोल</span></h1>
+  <p class="sub">Speak the order in any Indian language. Get the bill.</p>
+
+  <div class="tabs">
+    <button id="tabBill" class="on">Bill</button>
+    <button id="tabOrders">📞 Phone orders<span id="badge" class="badge hidden"></span></button>
+    <button id="tabPrices">Price list</button>
+  </div>
+
+  <section id="billView" class="card">
+    <button id="mic" aria-label="Record order">🎤</button>
+    <div id="status">Tap to speak, tap again to finish</div>
+    <div id="modeBar" class="modes hidden">
+      <button class="btn on" id="modeEdit">✏️ Change this bill</button>
+      <button class="btn" id="modeNew">＋ New bill</button>
+    </div>
+    <div id="result"></div>
+  </section>
+
+  <section id="orderView" class="card hidden">
+    <div id="orderList"><p class="small">No phone orders yet. Orders placed with the shop's voice agent show up here.</p></div>
+  </section>
+
+  <section id="priceView" class="card hidden">
+    <table>
+      <thead><tr><th>Item</th><th>Unit</th><th class="num">Price ₹</th><th></th></tr></thead>
+      <tbody id="priceRows"></tbody>
+    </table>
+    <p><button class="btn" id="addRow">+ Add item</button></p>
+    <p class="small">Saved in this browser. Item names can be in any language.</p>
+  </section>
+</main>
+
+<script>
+const DEFAULT_PRICES = [
+  { name: "Rice", unit: "kg", price: 60 }, { name: "Wheat flour (atta)", unit: "kg", price: 45 },
+  { name: "Sugar", unit: "kg", price: 44 }, { name: "Toor dal", unit: "kg", price: 160 },
+  { name: "Sunflower oil", unit: "litre", price: 150 }, { name: "Milk", unit: "litre", price: 56 },
+  { name: "Eggs", unit: "piece", price: 7 }, { name: "Bread", unit: "packet", price: 45 },
+  { name: "Tea powder", unit: "250 g pack", price: 130 }, { name: "Salt", unit: "kg", price: 25 },
+];
+let prices = load() || DEFAULT_PRICES;
+let bill = null, editing = false, said = [], manualRates = {};
+
+function load() { try { return JSON.parse(localStorage.getItem("prices")); } catch { return null; } }
+function save() { try { localStorage.setItem("prices", JSON.stringify(prices)); } catch {} }
+const rupees = n => { n = Math.round(n * 100) / 100; return "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: n % 1 ? 2 : 0 }); };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const $ = id => document.getElementById(id);
+
+// Tabs
+$("tabBill").onclick = () => show("bill");
+$("tabOrders").onclick = () => show("orders");
+$("tabPrices").onclick = () => show("prices");
+function show(view) {
+  for (const [v, section, tab] of [["bill", "billView", "tabBill"], ["orders", "orderView", "tabOrders"], ["prices", "priceView", "tabPrices"]]) {
+    $(section).classList.toggle("hidden", v !== view); $(tab).classList.toggle("on", v === view);
+  }
+  if (view === "prices") renderPrices();
+  if (view === "orders") { seenOrders = orders.length; $("badge").classList.add("hidden"); renderOrders(); }
+}
+
+// Price list editor
+function renderPrices() {
+  $("priceRows").innerHTML = prices.map((p, i) => `<tr>
+    <td><input data-i="${i}" data-k="name" value="${esc(p.name)}"></td>
+    <td><input data-i="${i}" data-k="unit" value="${esc(p.unit)}"></td>
+    <td class="num"><input class="price" type="number" min="0" step="any" data-i="${i}" data-k="price" value="${p.price}"></td>
+    <td><button class="btn link" data-del="${i}">Remove</button></td></tr>`).join("");
+}
+$("priceRows").oninput = e => {
+  const { i, k } = e.target.dataset; if (i === undefined) return;
+  prices[i][k] = k === "price" ? Number(e.target.value) : e.target.value; save();
+};
+$("priceRows").onclick = e => {
+  if (e.target.dataset.del === undefined) return;
+  prices.splice(Number(e.target.dataset.del), 1); save(); renderPrices();
+};
+$("addRow").onclick = () => { prices.push({ name: "", unit: "kg", price: 0 }); save(); renderPrices(); };
+
+// Mode: change the current bill by voice, or start a new one
+$("modeEdit").onclick = () => setMode(true);
+$("modeNew").onclick = () => setMode(false);
+function setMode(edit) {
+  editing = edit && !!bill;
+  $("modeBar").classList.toggle("hidden", !bill);
+  $("modeEdit").classList.toggle("on", editing); $("modeNew").classList.toggle("on", !editing);
+  $("status").textContent = editing ? "Tap to say changes, e.g. “remove eggs, one more kg rice”" : "Tap to speak a new order";
+}
+
+// Recording
+let recorder, chunks = [];
+$("mic").onclick = async () => {
+  if (recorder?.state === "recording") { recorder.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recorder = new MediaRecorder(stream); chunks = [];
+    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.onstop = () => { stream.getTracks().forEach(t => t.stop()); $("mic").classList.remove("rec"); send(new Blob(chunks, { type: recorder.mimeType })); };
+    recorder.start(); $("mic").classList.add("rec"); $("status").textContent = "Listening… tap to finish";
+  } catch { $("status").textContent = "Microphone permission is needed"; }
+};
+
+// A phone order is sent as text instead of audio and always starts a new bill
+async function send(blob, phoneOrder) {
+  $("status").textContent = "Making the bill…"; $("mic").disabled = true;
+  const form = new FormData();
+  if (phoneOrder) {
+    editing = false;
+    form.append("text", phoneOrder.order_text);
+    if (phoneOrder.language) form.append("language", phoneOrder.language);
+  } else {
+    form.append("audio", blob, blob.type.includes("mp4") ? "order.mp4" : "order.webm");
+  }
+  form.append("price_list", JSON.stringify(prices.filter(p => p.name)));
+  if (editing) form.append("current_bill", JSON.stringify({
+    items: bill.items.map(({ spoken_name, english_name, price_list_item, quantity, unit, spoken_rate }) =>
+      ({ spoken_name, english_name, price_list_item, quantity, unit, spoken_rate })),
+    discount: bill.discount,
+  }));
+  try {
+    const res = await fetch("/api/bill", { method: "POST", body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Something went wrong");
+    if (!editing) { said = []; manualRates = {}; }
+    said.push(phoneOrder ? `📞 ${phoneOrder.customer_name || "Phone order"}, pickup ${phoneOrder.pickup_time || "–"}: ${data.transcript}` : data.transcript);
+    bill = data; renderBill(); setMode(true);
+  } catch (err) { $("status").textContent = err.message; }
+  $("mic").disabled = false;
+}
+
+// Bill: unit rate = spoken rate, else price list, else ask the user
+function renderBill() {
+  bill.items.forEach(it => {
+    const listed = prices.find(p => p.name === it.price_list_item);
+    it.listPrice = listed ? listed.price : null;
+    if (it.rate === undefined) it.rate = it.spoken_rate ?? it.listPrice ?? manualRates[it.english_name] ?? null;
+  });
+  const rows = bill.items.map((it, i) => {
+    const special = it.spoken_rate != null && it.listPrice != null && it.spoken_rate !== it.listPrice;
+    const missing = it.listPrice == null && it.spoken_rate == null;
+    return `<tr class="${missing ? "missing" : ""}">
+      <td>${esc(it.spoken_name)}<div class="small">${esc(it.english_name)}${missing ? " · not in price list" : ""}</div></td>
+      <td class="num">${it.quantity} ${esc(it.unit)}</td>
+      <td class="num">${missing
+        ? `<input class="price" type="number" min="0" step="any" placeholder="₹ rate" data-rate="${i}" value="${it.rate ?? ""}">`
+        : `${rupees(it.rate)}${special ? `<div><span class="tag">special rate</span> <s class="small">${rupees(it.listPrice)}</s></div>` : ""}`}</td>
+      <td class="num">${it.rate == null ? "–" : rupees(it.rate * it.quantity)}${missing && it.rate != null
+        ? `<div><button class="btn link" data-save="${i}">Save to price list</button></div>` : ""}</td></tr>`;
+  }).join("");
+
+  const subtotal = bill.items.reduce((s, it) => s + (it.rate ?? 0) * it.quantity, 0);
+  const d = bill.discount;
+  const off = d.type === "percent" ? subtotal * d.value / 100 : d.type === "flat" ? Math.min(d.value, subtotal) : 0;
+  const pending = bill.items.some(it => it.rate == null);
+
+  $("result").innerHTML = `
+    <div class="transcript">${said.map((t, i) => `<div>${i ? "✏️ " : ""}“${esc(t)}”</div>`).join("")}</div>
+    <table>
+      <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
+      <tbody>${rows}
+        <tr><td colspan="3">Subtotal</td><td class="num">${rupees(subtotal)}</td></tr>
+        ${off ? `<tr><td colspan="3">Discount ${d.type === "percent" ? `(${d.value}%)` : ""}</td><td class="num">− ${rupees(off)}</td></tr>` : ""}
+        <tr class="total"><td colspan="3">Total</td><td class="num">${rupees(subtotal - off)}</td></tr>
+      </tbody>
+    </table>
+    ${pending ? `<p class="small">Enter a rate for the highlighted items to complete the total.</p>` : ""}`;
+}
+$("result").onchange = e => {
+  const i = e.target.dataset.rate; if (i === undefined) return;
+  const it = bill.items[i];
+  it.rate = e.target.value === "" ? null : Number(e.target.value);
+  manualRates[it.english_name] = it.rate; renderBill();
+};
+$("result").onclick = e => {
+  const i = e.target.dataset.save; if (i === undefined) return;
+  const it = bill.items[i];
+  prices.push({ name: it.english_name, unit: it.unit, price: it.rate }); save();
+  it.price_list_item = it.english_name; renderBill();
+};
+
+// Phone orders: poll the shop's inbox, then turn an order into a bill with the same parser
+let orders = [], seenOrders = null, billed = loadBilled();
+function loadBilled() { try { return new Set(JSON.parse(localStorage.getItem("billedOrders")) || []); } catch { return new Set(); } }
+function saveBilled() { try { localStorage.setItem("billedOrders", JSON.stringify([...billed])); } catch {} }
+const ago = ms => { const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
+
+async function pollOrders() {
+  try {
+    const res = await fetch("/api/orders");
+    if (res.ok) orders = (await res.json()).orders;
+  } catch {}
+  if (seenOrders === null) seenOrders = orders.length;
+  if (!$("orderView").classList.contains("hidden")) seenOrders = orders.length;
+  const fresh = orders.length - seenOrders;
+  $("badge").textContent = fresh; $("badge").classList.toggle("hidden", fresh <= 0);
+  renderOrders();
+}
+function renderOrders() {
+  if (!orders.length) return;
+  $("orderList").innerHTML = orders.map((o, i) => `<div class="order ${billed.has(o.id) ? "" : "new"}">
+    <div class="head"><strong>${esc(o.customer_name || "Customer")}</strong><span class="small">${ago(o.received_at)}</span></div>
+    <div class="small">Pickup: ${esc(o.pickup_time || "–")}${o.language ? ` · ${esc(o.language)}` : ""}${o.caller_phone ? ` · ${esc(o.caller_phone)}` : ""}</div>
+    <div class="what">${esc(o.order_text)}</div>
+    <button class="btn ${billed.has(o.id) ? "" : "primary"}" data-order="${i}">${billed.has(o.id) ? "Bill again" : "Make bill"}</button>
+  </div>`).join("");
+}
+$("orderList").onclick = e => {
+  const i = e.target.dataset.order; if (i === undefined) return;
+  const o = orders[i];
+  billed.add(o.id); saveBilled(); renderOrders();
+  show("bill"); send(null, o);
+};
+pollOrders(); setInterval(pollOrders, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+.env
+__pycache__/
+.claude/
+hello_sarvam.py
