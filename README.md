@@ -10,6 +10,22 @@ Customers can also **phone in their order**. A Sarvam voice agent takes it, read
 
 Built with [Sarvam AI](https://www.sarvam.ai) for the Sarvam AI hackathon.
 
+| Spoken Hindi order → bill | Phone orders inbox | Tamil phone order → bill |
+| --- | --- | --- |
+| ![Spoken bill](docs/screenshots/bill-spoken.png) | ![Phone orders](docs/screenshots/phone-orders.png) | ![Bill from phone order](docs/screenshots/bill-from-phone.png) |
+
+## Why it matters
+
+India's neighbourhood kirana shops are run by owners who bill from memory, on paper, or on a calculator, in their own language. Billing software assumes English menus and typing. Bill बोल lets the shopkeeper just **say** the order, in Hindi, Tamil, Bengali or a mix with English, and get an exact bill priced from their own list, including special rates and discounts said in passing.
+
+Phone orders are the other half of the counter. Today they arrive while the owner is serving someone else, get scribbled down, and are often misheard. **Dukaan Sahayak**, a Sarvam voice agent, answers in the caller's language, confirms every item, and drops the order on the shop's screen, ready to bill in one tap.
+
+**Design principle: the AI never handles money.** The models only listen and extract (items, quantities, units, rates and discounts as spoken). Every rupee is computed deterministically from the shop's price list, and the phone agent never quotes a price. The shopkeeper stays in control of every bill.
+
+**Fully built on Sarvam:** `saaras:v4` speech-to-text, `sarvam-105b-conversations` with strict JSON schema output, and the Samvaad voice-agent platform. Full agent design, prompt, tool payload and test conversations: [docs/voice-agent.md](docs/voice-agent.md).
+
+**Tested:** `python -m pytest tests` (9 tests: order inbox, Indian scripts, validation, text-to-bill path, parser prompts), plus end-to-end runs through the live deployment.
+
 ## What it does
 
 **Spoken billing**
@@ -58,6 +74,8 @@ app.py                Flask app: /api/bill (audio or text → bill lines), /api/
 templates/index.html  The whole UI: mic, bill, phone orders, price list
 requirements.txt      flask, sarvamai
 hello_sarvam.py       One-line check that your Sarvam API key works
+tests/                pytest suite (no network needed)
+docs/voice-agent.md   Voice agent design, prompt, tool payload, test calls
 ```
 
 ## Run it locally
